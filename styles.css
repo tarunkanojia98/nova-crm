@@ -1519,3 +1519,23 @@ body {
 	box-shadow: 0 0 0 4px var(--primary-soft);
 	transition: outline 0.3s ease, box-shadow 0.3s ease;
 }
+
+@media (max-width: 768px) {
+  .bar-chart {
+    gap: 8px;
+    padding-top: 16px;
+  }
+
+  .bars-pair {
+    gap: 4px;
+  }
+
+  .bar {
+    width: 14px;
+    border-radius: 4px 4px 0 0;
+  }
+
+  .bar-label {
+    font-size: 11px;
+  }
+}
