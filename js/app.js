@@ -1,386 +1,463 @@
 /* =========================================================
-   NOVA CRM — Core App Router, Dashboard, Directory,
-   Sales Pipeline Kanban & Tasks/Activities
-   ========================================================= */
+NOVA CRM — Core App Router, Dashboard, Directory,
+Sales Pipeline Kanban & Tasks/Activities
+========================================================= */
 
 let currentPage = "overview";
 let revenueTimeframe = "monthly";
 let editingCustomerId = null;
 let selectedDrawerCustomerId = null;
 let pendingDeleteCustomerId = null;
-let customerFilterState = { search: "", status: "All", repId: "All" };
-let taskFilterState = { status: "all", priority: "all", date: "" };
+let customerFilterState = {
+    search: "",
+    status: "All",
+    repId: "All"
+};
+let taskFilterState = {
+    status: "all",
+    priority: "all",
+    date: ""
+};
 
 const PIPELINE_STAGES = [
-  "New",
-  "Contacted",
-  "Qualified",
-  "Proposal Sent",
-  "Negotiation",
-  "Won",
-  "Lost"
+    "New",
+    "Contacted",
+    "Qualified",
+    "Proposal Sent",
+    "Negotiation",
+    "Won",
+    "Lost"
 ];
 
 document.addEventListener("DOMContentLoaded", () => {
-  applySavedTheme();
-  syncUserHeader();
-  setupNavigation();
-  setupGlobalSearch();
-  setupPopovers();
-  setupModals();
-  renderPage(getPageFromHash());
-
-  window.addEventListener("hashchange", () => {
+    applySavedTheme();
+    syncUserHeader();
+    setupNavigation();
+    setupGlobalSearch();
+    setupPopovers();
+    setupModals();
     renderPage(getPageFromHash());
-  });
+
+    window.addEventListener("hashchange", () => {
+        renderPage(getPageFromHash());
+    });
 });
 
 function getPageFromHash() {
-  const hash = window.location.hash.replace("#", "") || "overview";
-  const valid = ["overview", "customers", "pipeline", "tasks", "team", "settings"];
-  return valid.includes(hash) ? hash : "overview";
+    const hash = window.location.hash.replace("#", "") || "overview";
+    const valid = ["overview", "customers", "pipeline", "tasks", "team", "settings"];
+    return valid.includes(hash) ? hash : "overview";
 }
 
 /* ---------- Theme & Header ---------- */
 function applySavedTheme() {
-  const data = NovaStore.getData();
-  const theme = data.profile?.theme || "light";
-  document.documentElement.setAttribute("data-theme", theme);
-  const toggleBtn = document.getElementById("quick-theme-toggle");
-  if (toggleBtn) {
-    toggleBtn.textContent = theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode";
-  }
+    const data = NovaStore.getData();
+    const theme = data.profile?.theme || "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    const toggleBtn = document.getElementById("quick-theme-toggle");
+    if (toggleBtn) {
+        toggleBtn.textContent = theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode";
+    }
 }
 
 function toggleTheme() {
-  const data = NovaStore.getData();
-  data.profile.theme = data.profile.theme === "dark" ? "light" : "dark";
-  NovaStore.saveData(data);
-  applySavedTheme();
+    const data = NovaStore.getData();
+    data.profile.theme = data.profile.theme === "dark" ? "light" : "dark";
+    NovaStore.saveData(data);
+    applySavedTheme();
 }
 
 function syncUserHeader() {
-  const { profile } = NovaStore.getData();
-  document.getElementById("topbar-avatar").textContent = profile.initials;
-  document.getElementById("topbar-user-name").textContent = profile.name;
-  document.getElementById("dropdown-user-name").textContent = profile.name;
-  document.getElementById("dropdown-user-role").textContent = profile.role;
+    const { profile } = NovaStore.getData();
+    document.getElementById("topbar-avatar").textContent = profile.initials;
+    document.getElementById("topbar-user-name").textContent = profile.name;
+    document.getElementById("dropdown-user-name").textContent = profile.name;
+    document.getElementById("dropdown-user-role").textContent = profile.role;
 }
 
 /* ---------- Sidebar & Mobile Drawer ---------- */
 function setupNavigation() {
-  const sidebar = document.getElementById("sidebar");
-  const backdrop = document.getElementById("sidebar-backdrop");
-  const closeDrawer = () => {
-    sidebar.classList.remove("open");
-    backdrop.classList.remove("open");
-  };
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    const closeDrawer = () => {
+        sidebar.classList.remove("open");
+        backdrop.classList.remove("open");
+    };
 
-  document.getElementById("open-sidebar").addEventListener("click", () => {
-    sidebar.classList.add("open");
-    backdrop.classList.add("open");
-  });
-  document.getElementById("close-sidebar").addEventListener("click", closeDrawer);
-  backdrop.addEventListener("click", closeDrawer);
+    document.getElementById("open-sidebar").addEventListener("click", () => {
+        sidebar.classList.add("open");
+        backdrop.classList.add("open");
+    });
+    document.getElementById("close-sidebar").addEventListener("click", closeDrawer);
+    backdrop.addEventListener("click", closeDrawer);
 
-  document.querySelectorAll(".nav-item").forEach((link) => {
-    link.addEventListener("click", closeDrawer);
-  });
+    document.querySelectorAll(".nav-item").forEach((link) => {
+        link.addEventListener("click", closeDrawer);
+    });
 }
 
 function updateActiveNav(page) {
-  document.querySelectorAll(".nav-item").forEach((item) => {
-    item.classList.toggle("active", item.dataset.page === page);
-  });
+    document.querySelectorAll(".nav-item").forEach((item) => {
+        item.classList.toggle("active", item.dataset.page === page);
+    });
 }
 
-/* ---------- Global Quick-Search ---------- */
+/* ---------- Global Quick-Search (Deep-Linking to Exact Records) ---------- */
 function setupGlobalSearch() {
-  const input = document.getElementById("global-search-input");
-  const dropdown = document.getElementById("search-results");
+    const input = document.getElementById("global-search-input");
+    const dropdown = document.getElementById("search-results");
 
-  input.addEventListener("input", () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) {
-      dropdown.classList.remove("open");
-      return;
-    }
+    input.addEventListener("input", () => {
+        const q = input.value.trim().toLowerCase();
+        if (!q) {
+            dropdown.classList.remove("open");
+            return;
+        }
 
-    const data = NovaStore.getData();
-    const customers = data.customers.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q)
-    );
-    const leads = data.leads.filter((l) => l.title.toLowerCase().includes(q));
-    const tasks = data.tasks.filter((t) => t.title.toLowerCase().includes(q));
+        const data = NovaStore.getData();
+        const customers = data.customers.filter(
+                (c) =>
+                c.name.toLowerCase().includes(q) ||
+                c.company.toLowerCase().includes(q) ||
+                c.email.toLowerCase().includes(q));
+        const leads = data.leads.filter((l) => l.title.toLowerCase().includes(q));
+        const tasks = data.tasks.filter((t) => t.title.toLowerCase().includes(q));
 
-    let html = "";
-    if (customers.length) {
-      html += `<div class="search-group-label">Customers</div>`;
-      html += customers
-        .slice(0, 4)
-        .map(
-          (c) => `<a href="#customers" class="search-result-item">
+        let html = "";
+        if (customers.length) {
+            html += `<div class="search-group-label">Customers</div>`;
+            html += customers
+            .slice(0, 4)
+            .map(
+                (c) => `<button type="button" class="search-result-item" data-search-type="customer" data-record-id="${c.id}">
             <span>${c.name}</span><span class="search-result-meta">${c.company}</span>
-          </a>`
-        )
-        .join("");
-    }
-    if (leads.length) {
-      html += `<div class="search-group-label">Sales Pipeline</div>`;
-      html += leads
-        .slice(0, 4)
-        .map(
-          (l) => `<a href="#pipeline" class="search-result-item">
+          </button>`)
+            .join("");
+        }
+        if (leads.length) {
+            html += `<div class="search-group-label">Sales Pipeline</div>`;
+            html += leads
+            .slice(0, 4)
+            .map(
+                (l) => `<button type="button" class="search-result-item" data-search-type="lead" data-record-id="${l.id}">
             <span>${l.title}</span><span class="search-result-meta">${l.stage}</span>
-          </a>`
-        )
-        .join("");
-    }
-    if (tasks.length) {
-      html += `<div class="search-group-label">Tasks</div>`;
-      html += tasks
-        .slice(0, 4)
-        .map(
-          (t) => `<a href="#tasks" class="search-result-item">
+          </button>`)
+            .join("");
+        }
+        if (tasks.length) {
+            html += `<div class="search-group-label">Tasks</div>`;
+            html += tasks
+            .slice(0, 4)
+            .map(
+                (t) => `<button type="button" class="search-result-item" data-search-type="task" data-record-id="${t.id}">
             <span>${t.title}</span><span class="search-result-meta">${NovaFormat.date(t.dueDate)}</span>
-          </a>`
-        )
-        .join("");
+          </button>`)
+            .join("");
+        }
+
+        dropdown.innerHTML = html || `<div class="search-result-item">No matching records found.</div>`;
+        dropdown.classList.add("open");
+    });
+
+    dropdown.addEventListener("click", (e) => {
+        const item = e.target.closest("[data-search-type]");
+        if (!item)
+            return;
+
+        const { searchType, recordId } = item.dataset;
+        dropdown.classList.remove("open");
+        input.value = "";
+        openSearchTarget(searchType, recordId);
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest("#global-search"))
+            dropdown.classList.remove("open");
+    });
+}
+
+function openSearchTarget(type, id) {
+    if (type === "customer") {
+        customerFilterState = {
+            search: "",
+            status: "All",
+            repId: "All"
+        };
+        if (window.location.hash !== "#customers") {
+            window.location.hash = "#customers";
+        } else {
+            renderPage("customers");
+        }
+        setTimeout(() => openCustomerDrawer(id), 40);
+    } else if (type === "lead") {
+        if (window.location.hash !== "#pipeline") {
+            window.location.hash = "#pipeline";
+        } else {
+            renderPage("pipeline");
+        }
+        setTimeout(() => {
+            const card = document.querySelector(`.lead-card[data-lead-id="${id}"]`);
+            if (card) {
+                card.scrollIntoView({
+                    behavior: "smooth",
+                    block: "nearest",
+                    inline: "center"
+                });
+                card.classList.add("search-highlight");
+                setTimeout(() => card.classList.remove("search-highlight"), 2200);
+            }
+        }, 60);
+    } else if (type === "task") {
+        taskFilterState = {
+            status: "all",
+            priority: "all",
+            date: ""
+        };
+        if (window.location.hash !== "#tasks") {
+            window.location.hash = "#tasks";
+        } else {
+            renderPage("tasks");
+        }
+        setTimeout(() => {
+            const box = document.querySelector(`.task-check[data-task-id="${id}"]`);
+            const row = box?.closest(".task-item");
+            if (row) {
+                row.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center"
+                });
+                row.classList.add("search-highlight");
+                setTimeout(() => row.classList.remove("search-highlight"), 2200);
+            }
+        }, 60);
     }
-
-    dropdown.innerHTML = html || `<div class="search-result-item">No matching records found.</div>`;
-    dropdown.classList.add("open");
-  });
-
-  dropdown.addEventListener("click", () => {
-    dropdown.classList.remove("open");
-  });
-
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest("#global-search")) dropdown.classList.remove("open");
-  });
 }
 
 /* ---------- Notifications & Profile Popovers ---------- */
 function setupPopovers() {
-  const notifBtn = document.getElementById("notif-btn");
-  const notifPanel = document.getElementById("notif-panel");
-  const profileBtn = document.getElementById("profile-btn");
-  const profilePanel = document.getElementById("profile-panel");
+    const notifBtn = document.getElementById("notif-btn");
+    const notifPanel = document.getElementById("notif-panel");
+    const profileBtn = document.getElementById("profile-btn");
+    const profilePanel = document.getElementById("profile-panel");
 
-  renderNotifications();
-
-  notifBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    profilePanel.classList.remove("open");
-    notifPanel.classList.toggle("open");
-  });
-
-  profileBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    notifPanel.classList.remove("open");
-    profilePanel.classList.toggle("open");
-  });
-
-  document.getElementById("mark-all-read").addEventListener("click", () => {
-    const data = NovaStore.getData();
-    data.notifications.forEach((n) => (n.read = true));
-    NovaStore.saveData(data);
     renderNotifications();
-  });
 
-  document.getElementById("quick-theme-toggle").addEventListener("click", () => {
-    toggleTheme();
-    profilePanel.classList.remove("open");
-  });
+    notifBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        profilePanel.classList.remove("open");
+        notifPanel.classList.toggle("open");
+    });
 
-  document.addEventListener("click", () => {
-    notifPanel.classList.remove("open");
-    profilePanel.classList.remove("open");
-  });
+    profileBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        notifPanel.classList.remove("open");
+        profilePanel.classList.toggle("open");
+    });
+
+    document.getElementById("mark-all-read").addEventListener("click", () => {
+        const data = NovaStore.getData();
+        data.notifications.forEach((n) => (n.read = true));
+        NovaStore.saveData(data);
+        renderNotifications();
+    });
+
+    document.getElementById("quick-theme-toggle").addEventListener("click", () => {
+        toggleTheme();
+        profilePanel.classList.remove("open");
+    });
+
+    document.addEventListener("click", () => {
+        notifPanel.classList.remove("open");
+        profilePanel.classList.remove("open");
+    });
 }
 
 function renderNotifications() {
-  const { notifications } = NovaStore.getData();
-  const unread = notifications.filter((n) => !n.read).length;
-  const badge = document.getElementById("notif-badge");
-  badge.textContent = unread;
-  badge.classList.toggle("hidden", unread === 0);
+    const { notifications } = NovaStore.getData();
+    const unread = notifications.filter((n) => !n.read).length;
+    const badge = document.getElementById("notif-badge");
+    badge.textContent = unread;
+    badge.classList.toggle("hidden", unread === 0);
 
-  document.getElementById("notif-list").innerHTML = notifications
-    .map(
-      (n) => `<div class="notif-item ${n.read ? "" : "unread"}">
+    document.getElementById("notif-list").innerHTML = notifications
+        .map(
+            (n) => `<div class="notif-item ${n.read ? "" : "unread"}">
         ${n.text}
         <span class="notif-time">${n.time}</span>
-      </div>`
-    )
-    .join("");
+      </div>`)
+        .join("");
 }
 
 /* ---------- Modals & Slide-Over Drawer ---------- */
 function setupModals() {
-  document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-    btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-  });
+    document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+        btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
+    });
 
-  document.getElementById("quick-customer-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const payload = {
-      name: document.getElementById("cust-name").value.trim(),
-      company: document.getElementById("cust-company").value.trim(),
-      email: document.getElementById("cust-email").value.trim(),
-      phone: document.getElementById("cust-phone").value.trim(),
-      status: document.getElementById("cust-status").value,
-      repId: document.getElementById("cust-rep").value
-    };
+    document.getElementById("quick-customer-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const payload = {
+            name: document.getElementById("cust-name").value.trim(),
+            company: document.getElementById("cust-company").value.trim(),
+            email: document.getElementById("cust-email").value.trim(),
+            phone: document.getElementById("cust-phone").value.trim(),
+            status: document.getElementById("cust-status").value,
+            repId: document.getElementById("cust-rep").value
+        };
 
-    if (editingCustomerId) {
-      NovaStore.updateCustomer(editingCustomerId, payload);
-      editingCustomerId = null;
-    } else {
-      NovaStore.addCustomer(payload);
+        if (editingCustomerId) {
+            NovaStore.updateCustomer(editingCustomerId, payload);
+            editingCustomerId = null;
+        } else {
+            NovaStore.addCustomer(payload);
+        }
+
+        e.target.reset();
+        closeModal("customer-modal");
+        renderPage(currentPage);
+    });
+
+    document.getElementById("quick-task-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        NovaStore.addTask({
+            title: document.getElementById("task-title").value.trim(),
+            dueDate: document.getElementById("task-due").value,
+            priority: document.getElementById("task-priority").value,
+            customerId: document.getElementById("task-customer").value,
+            repId: document.getElementById("task-rep").value
+        });
+        e.target.reset();
+        closeModal("task-modal");
+        renderPage(currentPage);
+    });
+
+    const leadForm = document.getElementById("quick-lead-form");
+    if (leadForm) {
+        leadForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            NovaStore.addLead({
+                title: document.getElementById("lead-title").value.trim(),
+                customerId: document.getElementById("lead-customer").value,
+                value: Number(document.getElementById("lead-value").value),
+                stage: document.getElementById("lead-stage").value,
+                source: document.getElementById("lead-source").value,
+                repId: document.getElementById("lead-rep").value
+            });
+            e.target.reset();
+            closeModal("lead-modal");
+            renderPage(currentPage);
+        });
     }
 
-    e.target.reset();
-    closeModal("customer-modal");
-    renderPage(currentPage);
-  });
+    document.getElementById("close-customer-drawer").addEventListener("click", closeCustomerDrawer);
+    document.getElementById("customer-drawer-backdrop").addEventListener("click", closeCustomerDrawer);
 
-  document.getElementById("quick-task-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    NovaStore.addTask({
-      title: document.getElementById("task-title").value.trim(),
-      dueDate: document.getElementById("task-due").value,
-      priority: document.getElementById("task-priority").value,
-      customerId: document.getElementById("task-customer").value,
-      repId: document.getElementById("task-rep").value
+    document.getElementById("drawer-edit-btn").addEventListener("click", () => {
+        if (!selectedDrawerCustomerId)
+            return;
+        const id = selectedDrawerCustomerId;
+        closeCustomerDrawer();
+        openEditCustomerModal(id);
     });
-    e.target.reset();
-    closeModal("task-modal");
-    renderPage(currentPage);
-  });
 
-  const leadForm = document.getElementById("quick-lead-form");
-  if (leadForm) {
-    leadForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      NovaStore.addLead({
-        title: document.getElementById("lead-title").value.trim(),
-        customerId: document.getElementById("lead-customer").value,
-        value: Number(document.getElementById("lead-value").value),
-        stage: document.getElementById("lead-stage").value,
-        source: document.getElementById("lead-source").value,
-        repId: document.getElementById("lead-rep").value
-      });
-      e.target.reset();
-      closeModal("lead-modal");
-      renderPage(currentPage);
+    document.getElementById("drawer-delete-btn").addEventListener("click", () => {
+        if (!selectedDrawerCustomerId)
+            return;
+        requestDeleteCustomer(selectedDrawerCustomerId);
     });
-  }
 
-  document.getElementById("close-customer-drawer").addEventListener("click", closeCustomerDrawer);
-  document.getElementById("customer-drawer-backdrop").addEventListener("click", closeCustomerDrawer);
-
-  document.getElementById("drawer-edit-btn").addEventListener("click", () => {
-    if (!selectedDrawerCustomerId) return;
-    const id = selectedDrawerCustomerId;
-    closeCustomerDrawer();
-    openEditCustomerModal(id);
-  });
-
-  document.getElementById("drawer-delete-btn").addEventListener("click", () => {
-    if (!selectedDrawerCustomerId) return;
-    requestDeleteCustomer(selectedDrawerCustomerId);
-  });
-
-  document.getElementById("confirm-delete-btn").addEventListener("click", () => {
-    if (!pendingDeleteCustomerId) return;
-    NovaStore.deleteCustomer(pendingDeleteCustomerId);
-    pendingDeleteCustomerId = null;
-    closeModal("confirm-modal");
-    closeCustomerDrawer();
-    renderPage(currentPage);
-  });
+    document.getElementById("confirm-delete-btn").addEventListener("click", () => {
+        if (!pendingDeleteCustomerId)
+            return;
+        NovaStore.deleteCustomer(pendingDeleteCustomerId);
+        pendingDeleteCustomerId = null;
+        closeModal("confirm-modal");
+        closeCustomerDrawer();
+        renderPage(currentPage);
+    });
 }
 
 function openModal(id) {
-  const data = NovaStore.getData();
-  const repOptions = data.team.map((t) => `<option value="${t.id}">${t.name}</option>`).join("");
-  const custOptions = data.customers
-    .map((c) => `<option value="${c.id}">${c.company} (${c.name})</option>`)
-    .join("");
+    const data = NovaStore.getData();
+    const repOptions = data.team.map((t) => `<option value="${t.id}">${t.name}</option>`).join("");
+    const custOptions = data.customers
+        .map((c) => `<option value="${c.id}">${c.company} (${c.name})</option>`)
+        .join("");
 
-  if (id === "customer-modal") {
-    editingCustomerId = null;
-    document.querySelector("#customer-modal .modal-header h3").textContent = "Add New Customer";
-    document.getElementById("quick-customer-form").reset();
-    document.getElementById("cust-rep").innerHTML = repOptions;
-  }
+    if (id === "customer-modal") {
+        editingCustomerId = null;
+        document.querySelector("#customer-modal .modal-header h3").textContent = "Add New Customer";
+        document.getElementById("quick-customer-form").reset();
+        document.getElementById("cust-rep").innerHTML = repOptions;
+    }
 
-  if (id === "task-modal") {
-    document.getElementById("task-rep").innerHTML = repOptions;
-    document.getElementById("task-customer").innerHTML = custOptions;
-    document.getElementById("task-due").value = new Date().toISOString().split("T")[0];
-  }
+    if (id === "task-modal") {
+        document.getElementById("task-rep").innerHTML = repOptions;
+        document.getElementById("task-customer").innerHTML = custOptions;
+        document.getElementById("task-due").value = new Date().toISOString().split("T")[0];
+    }
 
-  if (id === "lead-modal") {
-    document.getElementById("lead-rep").innerHTML = repOptions;
-    document.getElementById("lead-customer").innerHTML = custOptions;
-  }
+    if (id === "lead-modal") {
+        document.getElementById("lead-rep").innerHTML = repOptions;
+        document.getElementById("lead-customer").innerHTML = custOptions;
+    }
 
-  document.getElementById(id).classList.add("open");
+    document.getElementById(id).classList.add("open");
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove("open");
+    document.getElementById(id).classList.remove("open");
 }
 
 function openEditCustomerModal(customerId) {
-  const customer = NovaStore.getCustomerById(customerId);
-  if (!customer) return;
-  const data = NovaStore.getData();
+    const customer = NovaStore.getCustomerById(customerId);
+    if (!customer)
+        return;
+    const data = NovaStore.getData();
 
-  editingCustomerId = customerId;
-  document.querySelector("#customer-modal .modal-header h3").textContent = "Edit Customer";
-  document.getElementById("cust-rep").innerHTML = data.team
-    .map((t) => `<option value="${t.id}">${t.name}</option>`)
-    .join("");
+    editingCustomerId = customerId;
+    document.querySelector("#customer-modal .modal-header h3").textContent = "Edit Customer";
+    document.getElementById("cust-rep").innerHTML = data.team
+        .map((t) => `<option value="${t.id}">${t.name}</option>`)
+        .join("");
 
-  document.getElementById("cust-name").value = customer.name;
-  document.getElementById("cust-company").value = customer.company;
-  document.getElementById("cust-email").value = customer.email;
-  document.getElementById("cust-phone").value = customer.phone;
-  document.getElementById("cust-status").value = customer.status;
-  document.getElementById("cust-rep").value = customer.repId || data.team[0]?.id || "";
+    document.getElementById("cust-name").value = customer.name;
+    document.getElementById("cust-company").value = customer.company;
+    document.getElementById("cust-email").value = customer.email;
+    document.getElementById("cust-phone").value = customer.phone;
+    document.getElementById("cust-status").value = customer.status;
+    document.getElementById("cust-rep").value = customer.repId || data.team[0]?.id || "";
 
-  document.getElementById("customer-modal").classList.add("open");
+    document.getElementById("customer-modal").classList.add("open");
 }
 
 function requestDeleteCustomer(customerId) {
-  const customer = NovaStore.getCustomerById(customerId);
-  if (!customer) return;
-  pendingDeleteCustomerId = customerId;
-  document.getElementById("confirm-message").textContent =
-    `Delete "${customer.company}" (${customer.name})? Linked leads and tasks will also be removed.`;
-  document.getElementById("confirm-modal").classList.add("open");
+    const customer = NovaStore.getCustomerById(customerId);
+    if (!customer)
+        return;
+    pendingDeleteCustomerId = customerId;
+    document.getElementById("confirm-message").textContent =
+`Delete "${customer.company}" (${customer.name})? Linked leads and tasks will also be removed.`;
+    document.getElementById("confirm-modal").classList.add("open");
 }
 
 function openCustomerDrawer(customerId) {
-  const customer = NovaStore.getCustomerById(customerId);
-  if (!customer) return;
+    const customer = NovaStore.getCustomerById(customerId);
+    if (!customer)
+        return;
 
-  selectedDrawerCustomerId = customerId;
-  const rep = NovaStore.getRepById(customer.repId);
-  const history = NovaStore.getCustomerHistory(customerId);
+    selectedDrawerCustomerId = customerId;
+    const rep = NovaStore.getRepById(customer.repId);
+    const history = NovaStore.getCustomerHistory(customerId);
 
-  document.getElementById("drawer-customer-name").textContent = customer.name;
-  document.getElementById("drawer-customer-company").textContent = customer.company;
+    document.getElementById("drawer-customer-name").textContent = customer.name;
+    document.getElementById("drawer-customer-company").textContent = customer.company;
 
-  const badge = document.getElementById("drawer-status-badge");
-  badge.textContent = customer.status;
-  badge.className = `drawer-eyebrow status-pill status-${customer.status.toLowerCase()}`;
+    const badge = document.getElementById("drawer-status-badge");
+    badge.textContent = customer.status;
+    badge.className = `drawer-eyebrow status-pill status-${customer.status.toLowerCase()}`;
 
-  document.getElementById("drawer-body").innerHTML = `
+    document.getElementById("drawer-body").innerHTML = `
     <div>
       <div class="drawer-section-title">Contact &amp; Account Details</div>
       <div class="info-list">
@@ -397,57 +474,56 @@ function openCustomerDrawer(customerId) {
       <div class="drawer-section-title">Activity History</div>
       ${
         history.length
-          ? `<ul class="activity-list">${history
-              .map(
-                (ev) => `<li class="activity-item">
+         ? `<ul class="activity-list">${history
+        .map(
+            (ev) => `<li class="activity-item">
                   <span class="activity-dot ${ev.type}"></span>
                   <div>${ev.label}</div>
-                </li>`
-              )
-              .join("")}</ul>`
-          : `<p class="customer-sub">No recorded activity yet.</p>`
-      }
+                </li>`)
+        .join("")}</ul>`
+         : `<p class="customer-sub">No recorded activity yet.</p>`
+}
     </div>
   `;
 
-  document.getElementById("customer-drawer").classList.add("open");
-  document.getElementById("customer-drawer-backdrop").classList.add("open");
+    document.getElementById("customer-drawer").classList.add("open");
+    document.getElementById("customer-drawer-backdrop").classList.add("open");
 }
 
 function closeCustomerDrawer() {
-  selectedDrawerCustomerId = null;
-  document.getElementById("customer-drawer").classList.remove("open");
-  document.getElementById("customer-drawer-backdrop").classList.remove("open");
+    selectedDrawerCustomerId = null;
+    document.getElementById("customer-drawer").classList.remove("open");
+    document.getElementById("customer-drawer-backdrop").classList.remove("open");
 }
 
 /* ---------- Page Router ---------- */
 function renderPage(page) {
-  currentPage = page;
-  updateActiveNav(page);
-  const view = document.getElementById("app-view");
+    currentPage = page;
+    updateActiveNav(page);
+    const view = document.getElementById("app-view");
 
-  if (page === "overview") {
-    renderDashboardOverview(view);
-  } else if (page === "customers") {
-    renderCustomersDirectory(view);
-  } else if (page === "pipeline") {
-    renderPipelineView(view);
-  } else if (page === "tasks") {
-    renderTasksView(view);
-  } else if (page === "team") {
-    renderTeamView(view);
-  } else if (page === "settings") {
-    renderSettingsView(view);
-  }
+    if (page === "overview") {
+        renderDashboardOverview(view);
+    } else if (page === "customers") {
+        renderCustomersDirectory(view);
+    } else if (page === "pipeline") {
+        renderPipelineView(view);
+    } else if (page === "tasks") {
+        renderTasksView(view);
+    } else if (page === "team") {
+        renderTeamView(view);
+    } else if (page === "settings") {
+        renderSettingsView(view);
+    }
 }
 
 /* ---------- Dashboard Overview ---------- */
 function renderDashboardOverview(container) {
-  const data = NovaStore.getData();
-  const kpis = NovaStore.getKPIs();
-  const todayStr = NovaFormat.date(new Date().toISOString().split("T")[0]);
+    const data = NovaStore.getData();
+    const kpis = NovaStore.getKPIs();
+    const todayStr = NovaFormat.date(new Date().toISOString().split("T")[0]);
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Welcome back, ${data.profile.name.split(" ")[0]}</h1>
@@ -509,17 +585,16 @@ function renderDashboardOverview(container) {
         </div>
         <ul class="activity-list">
           ${data.activities
-            .slice(0, 6)
-            .map(
-              (a) => `<li class="activity-item">
+        .slice(0, 6)
+        .map(
+            (a) => `<li class="activity-item">
                 <span class="activity-dot ${a.type}"></span>
                 <div>
                   <div>${a.text}</div>
                   <span class="activity-time">${a.time}</span>
                 </div>
-              </li>`
-            )
-            .join("")}
+              </li>`)
+        .join("")}
         </ul>
       </div>
 
@@ -530,11 +605,11 @@ function renderDashboardOverview(container) {
         </div>
         <ul class="task-list" id="dash-task-list">
           ${data.tasks
-            .slice(0, 5)
-            .map((t) => {
-              const overdue = NovaFormat.isOverdue(t.dueDate, t.completed);
-              const pClass = t.priority.toLowerCase();
-              return `<li class="task-item ${t.completed ? "done" : ""}">
+        .slice(0, 5)
+        .map((t) => {
+            const overdue = NovaFormat.isOverdue(t.dueDate, t.completed);
+            const pClass = t.priority.toLowerCase();
+            return `<li class="task-item ${t.completed ? "done" : ""}">
                 <div class="task-left">
                   <input type="checkbox" data-task-id="${t.id}" ${t.completed ? "checked" : ""} />
                   <div>
@@ -546,42 +621,42 @@ function renderDashboardOverview(container) {
                 </div>
                 <span class="badge badge-${pClass}">${t.priority}</span>
               </li>`;
-            })
-            .join("")}
+        })
+        .join("")}
         </ul>
       </div>
     </section>
   `;
 
-  renderRevenueChart(data.revenueSeries[revenueTimeframe]);
+    renderRevenueChart(data.revenueSeries[revenueTimeframe]);
 
-  document.getElementById("dash-add-customer").addEventListener("click", () => openModal("customer-modal"));
-  document.getElementById("dash-new-task").addEventListener("click", () => openModal("task-modal"));
+    document.getElementById("dash-add-customer").addEventListener("click", () => openModal("customer-modal"));
+    document.getElementById("dash-new-task").addEventListener("click", () => openModal("task-modal"));
 
-  document.querySelectorAll("#timeframe-switcher .seg-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      revenueTimeframe = btn.dataset.tf;
-      renderDashboardOverview(container);
+    document.querySelectorAll("#timeframe-switcher .seg-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            revenueTimeframe = btn.dataset.tf;
+            renderDashboardOverview(container);
+        });
     });
-  });
 
-  document.querySelectorAll("#dash-task-list input[type='checkbox']").forEach((cb) => {
-    cb.addEventListener("change", () => {
-      NovaStore.toggleTask(cb.dataset.taskId);
-      renderDashboardOverview(container);
+    document.querySelectorAll("#dash-task-list input[type='checkbox']").forEach((cb) => {
+        cb.addEventListener("change", () => {
+            NovaStore.toggleTask(cb.dataset.taskId);
+            renderDashboardOverview(container);
+        });
     });
-  });
 }
 
 function renderRevenueChart(series) {
-  const chartEl = document.getElementById("revenue-bar-chart");
-  const maxVal = Math.max(...series.flatMap((s) => [s.actual, s.target]), 1);
+    const chartEl = document.getElementById("revenue-bar-chart");
+    const maxVal = Math.max(...series.flatMap((s) => [s.actual, s.target]), 1);
 
-  chartEl.innerHTML = series
-    .map((item) => {
-      const actualH = Math.round((item.actual / maxVal) * 100);
-      const targetH = Math.round((item.target / maxVal) * 100);
-      return `
+    chartEl.innerHTML = series
+        .map((item) => {
+            const actualH = Math.round((item.actual / maxVal) * 100);
+            const targetH = Math.round((item.target / maxVal) * 100);
+            return `
         <div class="bar-group">
           <div class="bars-pair">
             <div class="bar actual" style="height:${actualH}%" title="Actual (${item.label}): ${NovaFormat.inr(item.actual)}"></div>
@@ -590,28 +665,28 @@ function renderRevenueChart(series) {
           <span class="bar-label">${item.label}</span>
         </div>
       `;
-    })
-    .join("");
+        })
+        .join("");
 }
 
 /* ---------- Customers Directory ---------- */
 function renderCustomersDirectory(container) {
-  const data = NovaStore.getData();
+    const data = NovaStore.getData();
 
-  const filtered = data.customers.filter((c) => {
-    const matchesStatus = customerFilterState.status === "All" || c.status === customerFilterState.status;
-    const matchesRep = customerFilterState.repId === "All" || c.repId === customerFilterState.repId;
-    const q = customerFilterState.search.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      c.name.toLowerCase().includes(q) ||
-      c.company.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      (c.city || "").toLowerCase().includes(q);
-    return matchesStatus && matchesRep && matchesSearch;
-  });
+    const filtered = data.customers.filter((c) => {
+        const matchesStatus = customerFilterState.status === "All" || c.status === customerFilterState.status;
+        const matchesRep = customerFilterState.repId === "All" || c.repId === customerFilterState.repId;
+        const q = customerFilterState.search.trim().toLowerCase();
+        const matchesSearch =
+            !q ||
+            c.name.toLowerCase().includes(q) ||
+            c.company.toLowerCase().includes(q) ||
+            c.email.toLowerCase().includes(q) ||
+            (c.city || "").toLowerCase().includes(q);
+        return matchesStatus && matchesRep && matchesSearch;
+    });
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Customers</h1>
@@ -640,10 +715,9 @@ function renderCustomersDirectory(container) {
         <select id="cust-filter-rep" class="filter-select">
           <option value="All" ${customerFilterState.repId === "All" ? "selected" : ""}>All Reps</option>
           ${data.team
-            .map(
-              (t) => `<option value="${t.id}" ${customerFilterState.repId === t.id ? "selected" : ""}>${t.name}</option>`
-            )
-            .join("")}
+        .map(
+            (t) => `<option value="${t.id}" ${customerFilterState.repId === t.id ? "selected" : ""}>${t.name}</option>`)
+        .join("")}
         </select>
       </div>
     </div>
@@ -662,11 +736,11 @@ function renderCustomersDirectory(container) {
           </thead>
           <tbody>
             ${
-              filtered.length
-                ? filtered
-                    .map((c) => {
-                      const rep = data.team.find((t) => t.id === c.repId);
-                      return `
+        filtered.length
+         ? filtered
+        .map((c) => {
+            const rep = data.team.find((t) => t.id === c.repId);
+            return `
                         <tr class="clickable-row" data-customer-id="${c.id}">
                           <td>
                             <div class="customer-primary">${c.name}</div>
@@ -686,54 +760,54 @@ function renderCustomersDirectory(container) {
                           </td>
                         </tr>
                       `;
-                    })
-                    .join("")
-                : `<tr><td colspan="5" class="empty-state">No customers match your current search or filter.</td></tr>`
-            }
+        })
+        .join("")
+         : `<tr><td colspan="5" class="empty-state">No customers match your current search or filter.</td></tr>`
+}
           </tbody>
         </table>
       </div>
     </div>
   `;
 
-  document.getElementById("dir-add-customer").addEventListener("click", () => openModal("customer-modal"));
+    document.getElementById("dir-add-customer").addEventListener("click", () => openModal("customer-modal"));
 
-  document.getElementById("cust-filter-search").addEventListener("input", (e) => {
-    customerFilterState.search = e.target.value;
-    renderCustomersDirectory(container);
-    const input = document.getElementById("cust-filter-search");
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  });
+    document.getElementById("cust-filter-search").addEventListener("input", (e) => {
+        customerFilterState.search = e.target.value;
+        renderCustomersDirectory(container);
+        const input = document.getElementById("cust-filter-search");
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+    });
 
-  document.getElementById("cust-filter-status").addEventListener("change", (e) => {
-    customerFilterState.status = e.target.value;
-    renderCustomersDirectory(container);
-  });
+    document.getElementById("cust-filter-status").addEventListener("change", (e) => {
+        customerFilterState.status = e.target.value;
+        renderCustomersDirectory(container);
+    });
 
-  document.getElementById("cust-filter-rep").addEventListener("change", (e) => {
-    customerFilterState.repId = e.target.value;
-    renderCustomersDirectory(container);
-  });
+    document.getElementById("cust-filter-rep").addEventListener("change", (e) => {
+        customerFilterState.repId = e.target.value;
+        renderCustomersDirectory(container);
+    });
 
-  container.querySelectorAll("tr.clickable-row").forEach((row) => {
-    row.addEventListener("click", () => openCustomerDrawer(row.dataset.customerId));
-  });
+    container.querySelectorAll("tr.clickable-row").forEach((row) => {
+        row.addEventListener("click", () => openCustomerDrawer(row.dataset.customerId));
+    });
 
-  container.querySelectorAll("[data-edit-cust]").forEach((btn) => {
-    btn.addEventListener("click", () => openEditCustomerModal(btn.dataset.editCust));
-  });
+    container.querySelectorAll("[data-edit-cust]").forEach((btn) => {
+        btn.addEventListener("click", () => openEditCustomerModal(btn.dataset.editCust));
+    });
 
-  container.querySelectorAll("[data-del-cust]").forEach((btn) => {
-    btn.addEventListener("click", () => requestDeleteCustomer(btn.dataset.delCust));
-  });
+    container.querySelectorAll("[data-del-cust]").forEach((btn) => {
+        btn.addEventListener("click", () => requestDeleteCustomer(btn.dataset.delCust));
+    });
 }
 
 /* ---------- Sales Pipeline (Kanban) ---------- */
 function renderPipelineView(container) {
-  const data = NovaStore.getData();
+    const data = NovaStore.getData();
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Sales Pipeline</h1>
@@ -748,11 +822,11 @@ function renderPipelineView(container) {
 
     <div class="pipeline-board" id="pipeline-board">
       ${PIPELINE_STAGES.map((stage) => {
-        const stageLeads = data.leads.filter((l) => l.stage === stage);
-        const stageTotal = stageLeads.reduce((sum, l) => sum + Number(l.value || 0), 0);
-        const specialClass = stage === "Won" ? "col-won" : stage === "Lost" ? "col-lost" : "";
+            const stageLeads = data.leads.filter((l) => l.stage === stage);
+            const stageTotal = stageLeads.reduce((sum, l) => sum + Number(l.value || 0), 0);
+            const specialClass = stage === "Won" ? "col-won" : stage === "Lost" ? "col-lost" : "";
 
-        return `
+            return `
           <div class="pipeline-col ${specialClass}" data-stage="${stage}">
             <div class="pipeline-col-header">
               <span class="pipeline-col-title">${stage} (${stageLeads.length})</span>
@@ -760,12 +834,12 @@ function renderPipelineView(container) {
             </div>
             <div class="pipeline-cards">
               ${
-                stageLeads.length
-                  ? stageLeads
-                      .map((lead) => {
-                        const cust = data.customers.find((c) => c.id === lead.customerId);
-                        const rep = data.team.find((t) => t.id === lead.repId);
-                        return `
+            stageLeads.length
+             ? stageLeads
+            .map((lead) => {
+                const cust = data.customers.find((c) => c.id === lead.customerId);
+                const rep = data.team.find((t) => t.id === lead.repId);
+                return `
                           <div class="lead-card" draggable="true" data-lead-id="${lead.id}">
                             <div class="lead-title">${lead.title}</div>
                             <div class="lead-company">${cust ? cust.company : "SMB Account"} • ${lead.source}</div>
@@ -775,87 +849,97 @@ function renderPipelineView(container) {
                             </div>
                             <select class="stage-select" data-lead-id="${lead.id}" aria-label="Change stage for ${lead.title}">
                               ${PIPELINE_STAGES.map(
-                                (s) => `<option value="${s}" ${s === lead.stage ? "selected" : ""}>Move to: ${s}</option>`
-                              ).join("")}
+                    (s) => `<option value="${s}" ${s === lead.stage ? "selected" : ""}>Move to: ${s}</option>`).join("")}
                             </select>
                           </div>
                         `;
-                      })
-                      .join("")
-                  : `<div class="empty-state" style="padding: 24px 8px; font-size: 12.5px;">Drop lead here</div>`
-              }
+            })
+            .join("")
+             : `<div class="empty-state" style="padding: 24px 8px; font-size: 12.5px;">Drop lead here</div>`
+}
             </div>
           </div>
         `;
-      }).join("")}
+        }).join("")}
     </div>
   `;
 
-  const board = document.getElementById("pipeline-board");
+    const board = document.getElementById("pipeline-board");
 
-  document.getElementById("pipe-scroll-left").addEventListener("click", () => {
-    board.scrollBy({ left: -340, behavior: "smooth" });
-  });
-
-  document.getElementById("pipe-scroll-right").addEventListener("click", () => {
-    board.scrollBy({ left: 340, behavior: "smooth" });
-  });
-
-  document.getElementById("pipeline-add-lead").addEventListener("click", () => openModal("lead-modal"));
-
-  container.querySelectorAll(".stage-select").forEach((select) => {
-    select.addEventListener("change", (e) => {
-      NovaStore.updateLeadStage(e.target.dataset.leadId, e.target.value);
-      renderPipelineView(container);
+    document.getElementById("pipe-scroll-left").addEventListener("click", () => {
+        board.scrollBy({
+            left: -340,
+            behavior: "smooth"
+        });
     });
-  });
 
-  let draggedLeadId = null;
+    document.getElementById("pipe-scroll-right").addEventListener("click", () => {
+        board.scrollBy({
+            left: 340,
+            behavior: "smooth"
+        });
+    });
 
-  container.querySelectorAll(".lead-card").forEach((card) => {
-    card.addEventListener("dragstart", () => {
-      draggedLeadId = card.dataset.leadId;
-      card.classList.add("dragging");
-    });
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      draggedLeadId = null;
-    });
-  });
+    document.getElementById("pipeline-add-lead").addEventListener("click", () => openModal("lead-modal"));
 
-  container.querySelectorAll(".pipeline-col").forEach((col) => {
-    col.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      col.classList.add("drag-over");
+    container.querySelectorAll(".stage-select").forEach((select) => {
+        select.addEventListener("change", (e) => {
+            NovaStore.updateLeadStage(e.target.dataset.leadId, e.target.value);
+            renderPipelineView(container);
+        });
     });
-    col.addEventListener("dragleave", () => {
-      col.classList.remove("drag-over");
+
+    let draggedLeadId = null;
+
+    container.querySelectorAll(".lead-card").forEach((card) => {
+        card.addEventListener("dragstart", () => {
+            draggedLeadId = card.dataset.leadId;
+            card.classList.add("dragging");
+        });
+        card.addEventListener("dragend", () => {
+            card.classList.remove("dragging");
+            draggedLeadId = null;
+        });
     });
-    col.addEventListener("drop", (e) => {
-      e.preventDefault();
-      col.classList.remove("drag-over");
-      if (draggedLeadId) {
-        NovaStore.updateLeadStage(draggedLeadId, col.dataset.stage);
-        renderPipelineView(container);
-      }
+
+    container.querySelectorAll(".pipeline-col").forEach((col) => {
+        col.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            col.classList.add("drag-over");
+        });
+        col.addEventListener("dragleave", () => {
+            col.classList.remove("drag-over");
+        });
+        col.addEventListener("drop", (e) => {
+            e.preventDefault();
+            col.classList.remove("drag-over");
+            if (draggedLeadId) {
+                NovaStore.updateLeadStage(draggedLeadId, col.dataset.stage);
+                renderPipelineView(container);
+            }
+        });
     });
-  });
 }
 
 /* ---------- Tasks & Activities ---------- */
 function renderTasksView(container) {
-  const data = NovaStore.getData();
+    const data = NovaStore.getData();
 
-  const filteredTasks = data.tasks.filter((t) => {
-    if (taskFilterState.status === "completed" && !t.completed) return false;
-    if (taskFilterState.status === "pending" && t.completed) return false;
-    if (taskFilterState.status === "overdue" && !NovaFormat.isOverdue(t.dueDate, t.completed)) return false;
-    if (taskFilterState.priority !== "all" && t.priority !== taskFilterState.priority) return false;
-    if (taskFilterState.date && t.dueDate !== taskFilterState.date) return false;
-    return true;
-  });
+    const filteredTasks = data.tasks.filter((t) => {
+        if (taskFilterState.status === "completed" && !t.completed)
+            return false;
+        if (taskFilterState.status === "pending" && t.completed)
+            return false;
+        if (taskFilterState.status === "overdue" && !NovaFormat.isOverdue(t.dueDate, t.completed))
+            return false;
+        if (taskFilterState.priority !== "all" && t.priority !== taskFilterState.priority)
+            return false;
+        if (taskFilterState.date && t.dueDate !== taskFilterState.date)
+            return false;
+        return true;
+    });
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Tasks &amp; Activities</h1>
@@ -882,10 +966,10 @@ function renderTasksView(container) {
         </select>
         <input type="date" id="task-filter-date" class="filter-select" value="${taskFilterState.date}" />
         ${
-          taskFilterState.status !== "all" || taskFilterState.priority !== "all" || taskFilterState.date
-            ? `<button type="button" class="btn btn-secondary btn-xs" id="task-reset-filters">Clear Filters</button>`
-            : ""
-        }
+        taskFilterState.status !== "all" || taskFilterState.priority !== "all" || taskFilterState.date
+         ? `<button type="button" class="btn btn-secondary btn-xs" id="task-reset-filters">Clear Filters</button>`
+         : ""
+}
       </div>
     </div>
 
@@ -896,14 +980,14 @@ function renderTasksView(container) {
         </div>
         <ul class="task-list">
           ${
-            filteredTasks.length
-              ? filteredTasks
-                  .map((t) => {
-                    const overdue = NovaFormat.isOverdue(t.dueDate, t.completed);
-                    const cust = data.customers.find((c) => c.id === t.customerId);
-                    const rep = data.team.find((r) => r.id === t.repId);
-                    const pClass = t.priority.toLowerCase();
-                    return `
+        filteredTasks.length
+         ? filteredTasks
+        .map((t) => {
+            const overdue = NovaFormat.isOverdue(t.dueDate, t.completed);
+            const cust = data.customers.find((c) => c.id === t.customerId);
+            const rep = data.team.find((r) => r.id === t.repId);
+            const pClass = t.priority.toLowerCase();
+            return `
                       <li class="task-item ${t.completed ? "done" : ""}">
                         <div class="task-left">
                           <input type="checkbox" class="task-check" data-task-id="${t.id}" ${t.completed ? "checked" : ""} />
@@ -922,10 +1006,10 @@ function renderTasksView(container) {
                         </div>
                       </li>
                     `;
-                  })
-                  .join("")
-              : `<li class="empty-state">No tasks match your current filters.</li>`
-          }
+        })
+        .join("")
+         : `<li class="empty-state">No tasks match your current filters.</li>`
+}
         </ul>
       </div>
 
@@ -935,8 +1019,8 @@ function renderTasksView(container) {
         </div>
         <ul class="activity-list">
           ${data.activities
-            .map(
-              (a) => `
+        .map(
+            (a) => `
               <li class="activity-item">
                 <span class="activity-dot ${a.type}"></span>
                 <div>
@@ -944,69 +1028,72 @@ function renderTasksView(container) {
                   <span class="activity-time">${a.time}</span>
                 </div>
               </li>
-            `
-            )
-            .join("")}
+            `)
+        .join("")}
         </ul>
       </div>
     </div>
   `;
 
-  document.getElementById("tasks-new-btn").addEventListener("click", () => openModal("task-modal"));
+    document.getElementById("tasks-new-btn").addEventListener("click", () => openModal("task-modal"));
 
-  container.querySelectorAll(".task-check").forEach((box) => {
-    box.addEventListener("change", () => {
-      NovaStore.toggleTask(box.dataset.taskId);
-      renderTasksView(container);
+    container.querySelectorAll(".task-check").forEach((box) => {
+        box.addEventListener("change", () => {
+            NovaStore.toggleTask(box.dataset.taskId);
+            renderTasksView(container);
+        });
     });
-  });
 
-  container.querySelectorAll(".btn-delete-task").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      NovaStore.deleteTask(btn.dataset.taskId);
-      renderTasksView(container);
+    container.querySelectorAll(".btn-delete-task").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            NovaStore.deleteTask(btn.dataset.taskId);
+            renderTasksView(container);
+        });
     });
-  });
 
-  document.getElementById("task-filter-status").addEventListener("change", (e) => {
-    taskFilterState.status = e.target.value;
-    renderTasksView(container);
-  });
-
-  document.getElementById("task-filter-priority").addEventListener("change", (e) => {
-    taskFilterState.priority = e.target.value;
-    renderTasksView(container);
-  });
-
-  document.getElementById("task-filter-date").addEventListener("change", (e) => {
-    taskFilterState.date = e.target.value;
-    renderTasksView(container);
-  });
-
-  const resetBtn = document.getElementById("task-reset-filters");
-  if (resetBtn) {
-    resetBtn.addEventListener("click", () => {
-      taskFilterState = { status: "all", priority: "all", date: "" };
-      renderTasksView(container);
+    document.getElementById("task-filter-status").addEventListener("change", (e) => {
+        taskFilterState.status = e.target.value;
+        renderTasksView(container);
     });
-  }
+
+    document.getElementById("task-filter-priority").addEventListener("change", (e) => {
+        taskFilterState.priority = e.target.value;
+        renderTasksView(container);
+    });
+
+    document.getElementById("task-filter-date").addEventListener("change", (e) => {
+        taskFilterState.date = e.target.value;
+        renderTasksView(container);
+    });
+
+    const resetBtn = document.getElementById("task-reset-filters");
+    if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+            taskFilterState = {
+                status: "all",
+                priority: "all",
+                date: ""
+            };
+            renderTasksView(container);
+        });
+    }
 }
 
 /* ---------- Team Management ---------- */
 function renderTeamView(container) {
-  const data = NovaStore.getData();
-  const wonLeads = data.leads.filter((l) => l.stage === "Won");
-  const totalWonRevenue = wonLeads.reduce((sum, l) => sum + Number(l.value || 0), 0);
+    const data = NovaStore.getData();
+    const wonLeads = data.leads.filter((l) => l.stage === "Won");
+    const totalWonRevenue = wonLeads.reduce((sum, l) => sum + Number(l.value || 0), 0);
 
-  const rolePermissions = {
-    "Sales Director": "Full Admin • Pipeline, Team & Billing",
-    "Senior Account Exec": "Manage Deals, Customers & Quotes",
-    "Sales Representative": "Assigned Leads & Customer Follow-ups",
-    "Customer Success": "Onboarding, Support & Renewals",
-    "Lead Generation": "Create Leads & Qualify Prospects"
-  };
+    const rolePermissions = {
+        "Sales Director": "Full Admin • Pipeline, Team & Billing",
+        "Senior Account Exec": "Manage Deals, Customers & Quotes",
+        "Sales Representative": "Assigned Leads & Customer Follow-ups",
+        "Customer Success": "Onboarding, Support & Renewals",
+        "Lead Generation": "Create Leads & Qualify Prospects"
+    };
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Team Management</h1>
@@ -1017,14 +1104,14 @@ function renderTeamView(container) {
     <div class="team-grid">
       ${data.team
         .map((member) => {
-          const memberLeads = data.leads.filter((l) => l.repId === member.id);
-          const memberWon = memberLeads.filter((l) => l.stage === "Won");
-          const memberRevenue = memberWon.reduce((sum, l) => sum + Number(l.value || 0), 0);
-          const contribution =
-            totalWonRevenue > 0 ? ((memberRevenue / totalWonRevenue) * 100).toFixed(1) : "0.0";
-          const targetPct = Math.min(100, Math.round((memberRevenue / (member.target || 1)) * 100));
+            const memberLeads = data.leads.filter((l) => l.repId === member.id);
+            const memberWon = memberLeads.filter((l) => l.stage === "Won");
+            const memberRevenue = memberWon.reduce((sum, l) => sum + Number(l.value || 0), 0);
+            const contribution =
+                totalWonRevenue > 0 ? ((memberRevenue / totalWonRevenue) * 100).toFixed(1) : "0.0";
+            const targetPct = Math.min(100, Math.round((memberRevenue / (member.target || 1)) * 100));
 
-          return `
+            return `
             <div class="card team-card">
               <div class="team-card-top">
                 <div class="team-avatar">${member.initials}</div>
@@ -1042,10 +1129,9 @@ function renderTeamView(container) {
                 <label>Role Simulation</label>
                 <select class="team-role-select" data-rep-id="${member.id}">
                   ${Object.keys(rolePermissions)
-                    .map(
-                      (r) => `<option value="${r}" ${r === member.role ? "selected" : ""}>${r}</option>`
-                    )
-                    .join("")}
+            .map(
+                (r) => `<option value="${r}" ${r === member.role ? "selected" : ""}>${r}</option>`)
+            .join("")}
                 </select>
               </div>
 
@@ -1080,19 +1166,19 @@ function renderTeamView(container) {
     </div>
   `;
 
-  container.querySelectorAll(".team-role-select").forEach((sel) => {
-    sel.addEventListener("change", (e) => {
-      NovaStore.updateTeamRole(e.target.dataset.repId, e.target.value);
-      renderTeamView(container);
+    container.querySelectorAll(".team-role-select").forEach((sel) => {
+        sel.addEventListener("change", (e) => {
+            NovaStore.updateTeamRole(e.target.dataset.repId, e.target.value);
+            renderTeamView(container);
+        });
     });
-  });
 }
 
 /* ---------- Settings ---------- */
 function renderSettingsView(container) {
-  const { profile } = NovaStore.getData();
+    const { profile } = NovaStore.getData();
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="page-header">
       <div>
         <h1 class="page-title">Settings</h1>
@@ -1209,54 +1295,56 @@ function renderSettingsView(container) {
     </div>
   `;
 
-  document.getElementById("settings-profile-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    NovaStore.updateProfile({
-      name: document.getElementById("set-name").value.trim(),
-      role: document.getElementById("set-role").value.trim(),
-      email: document.getElementById("set-email").value.trim(),
-      phone: document.getElementById("set-phone").value.trim(),
-      company: document.getElementById("set-company").value.trim()
+    document.getElementById("settings-profile-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        NovaStore.updateProfile({
+            name: document.getElementById("set-name").value.trim(),
+            role: document.getElementById("set-role").value.trim(),
+            email: document.getElementById("set-email").value.trim(),
+            phone: document.getElementById("set-phone").value.trim(),
+            company: document.getElementById("set-company").value.trim()
+        });
+        syncUserHeader();
+        document.getElementById("profile-save-msg").textContent = "✓ Profile & company details saved.";
     });
-    syncUserHeader();
-    document.getElementById("profile-save-msg").textContent = "✓ Profile & company details saved.";
-  });
 
-  document.getElementById("settings-password-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    e.target.reset();
-    document.getElementById("password-save-msg").textContent = "✓ Password updated (UI simulation).";
-  });
-
-  container.querySelectorAll("[data-theme-choice]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      NovaStore.updateProfile({ theme: btn.dataset.themeChoice });
-      applySavedTheme();
-      renderSettingsView(container);
+    document.getElementById("settings-password-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        e.target.reset();
+        document.getElementById("password-save-msg").textContent = "✓ Password updated (UI simulation).";
     });
-  });
 
-  ["notif-email", "notif-deals", "notif-tasks"].forEach((id) => {
-    document.getElementById(id).addEventListener("change", () => {
-      NovaStore.updateProfile({
-        notifications: {
-          emailAlerts: document.getElementById("notif-email").checked,
-          dealUpdates: document.getElementById("notif-deals").checked,
-          taskReminders: document.getElementById("notif-tasks").checked
-        }
-      });
+    container.querySelectorAll("[data-theme-choice]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            NovaStore.updateProfile({
+                theme: btn.dataset.themeChoice
+            });
+            applySavedTheme();
+            renderSettingsView(container);
+        });
     });
-  });
 
-  document.getElementById("reset-demo-btn").addEventListener("click", () => {
-    const confirmed = window.confirm(
-      "Reset all NOVA CRM demo data? Any custom customers, leads, or tasks you added will be replaced with the original sample dataset."
-    );
-    if (!confirmed) return;
-    NovaStore.resetDemoData();
-    applySavedTheme();
-    syncUserHeader();
-    renderNotifications();
-    renderSettingsView(container);
-  });
+    ["notif-email", "notif-deals", "notif-tasks"].forEach((id) => {
+        document.getElementById(id).addEventListener("change", () => {
+            NovaStore.updateProfile({
+                notifications: {
+                    emailAlerts: document.getElementById("notif-email").checked,
+                    dealUpdates: document.getElementById("notif-deals").checked,
+                    taskReminders: document.getElementById("notif-tasks").checked
+                }
+            });
+        });
+    });
+
+    document.getElementById("reset-demo-btn").addEventListener("click", () => {
+        const confirmed = window.confirm(
+                "Reset all NOVA CRM demo data? Any custom customers, leads, or tasks you added will be replaced with the original sample dataset.");
+        if (!confirmed)
+            return;
+        NovaStore.resetDemoData();
+        applySavedTheme();
+        syncUserHeader();
+        renderNotifications();
+        renderSettingsView(container);
+    });
 }
